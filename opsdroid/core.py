@@ -1,6 +1,7 @@
 """Core components of OpsDroid."""
 
 import asyncio
+import anyio
 import contextlib
 import copy
 import inspect
@@ -8,6 +9,7 @@ import logging
 import os
 import signal
 import sys
+import warnings
 import weakref
 
 from watchgod import PythonWatcher, awatch
@@ -30,7 +32,7 @@ from opsdroid.parsers.parseformat import parse_format
 from opsdroid.parsers.rasanlu import (
     parse_rasanlu,
     train_rasanlu,
-    has_compatible_version_rasanlu,
+    rasa_usable,
 )
 from opsdroid.parsers.regex import parse_regex
 from opsdroid.parsers.sapcai import parse_sapcai
@@ -50,14 +52,14 @@ class OpsDroid:
 
     instances = []
 
-    def __init__(self, config=None, config_path=None):
+    def __init__(self, config=None, config_path=None, loopless=False):
         """Start opsdroid."""
         self.bot_name = "opsdroid"
         self._running = False
         self.sys_status = 0
         self.connectors = []
-        self.eventloop = asyncio.get_event_loop()
-        if os.name != "nt":
+        self.eventloop = asyncio.get_event_loop() if not loopless else None
+        if os.name != "nt" and not loopless:
             for sig in (signal.SIGINT, signal.SIGTERM):
                 self.eventloop.add_signal_handler(
                     sig, lambda: asyncio.ensure_future(self.handle_stop_signal())
@@ -65,7 +67,7 @@ class OpsDroid:
             self.eventloop.add_signal_handler(
                 signal.SIGHUP, lambda: asyncio.ensure_future(self.reload())
             )
-        self.eventloop.set_exception_handler(self.handle_async_exception)
+            self.eventloop.set_exception_handler(self.handle_async_exception)
         self.skills = []
         self.memory = Memory()
         self.modules = {}
@@ -146,14 +148,16 @@ class OpsDroid:
             context (String): Describes the exception encountered.
 
         """
-        print("ERROR: Unhandled exception in opsdroid, exiting...")
+        warnings.warn(
+            "ERROR: Unhandled exception in opsdroid, exiting...", stacklevel=2
+        )
         if "future" in context:
             try:  # pragma: nocover
                 context["future"].result()
             # pylint: disable=broad-except
-            except Exception:  # pragma: nocover
-                print("Caught exception")
-        print(context)
+            except Exception as e:  # pragma: nocover
+                warnings.warn("Caught exception", stacklevel=2, source=e)
+        warnings.warn(context, stacklevel=2)
 
     def is_running(self):
         """Check whether opsdroid is running."""
@@ -216,7 +220,8 @@ class OpsDroid:
 
     def sync_load(self):
         """Run the load modules method synchronously."""
-        self.eventloop.run_until_complete(self.load())
+        # self.eventloop.run_until_complete(self.load())
+        anyio.run(self.load)
 
     async def load(self, config=None):
         """Load modules."""
@@ -226,10 +231,10 @@ class OpsDroid:
         _LOGGER.debug(_("Loaded %i skills."), len(self.modules["skills"] or []))
         self.web_server = Web(self)
         self.setup_skills(self.modules["skills"])
-        await self.setup_databases(self.modules["databases"])
-        await self.setup_connectors(self.modules["connectors"])
+        await self.setup_databases(self.modules["databases"] or {})
+        await self.setup_connectors(self.modules["connectors"] or {})
         self.web_server.setup_webhooks(self.skills)
-        await self.train_parsers(self.modules["skills"])
+        await self.train_parsers(self.modules["skills"] or {})
 
     async def stop(self):
         """Stop all tasks running in opsdroid."""
@@ -255,12 +260,13 @@ class OpsDroid:
                 task.cancel()
         _LOGGER.info(_("Stopped pending tasks."))
 
-    async def unload(self, future=None):
+    async def unload(self, future=None, unload_server=True):
         """Stop the event loop."""
         self.skills = []
         self.connectors = []
         self.memory.databases = []
-        self.web_server = None
+        if unload_server:
+            self.web_server = None
         self.modules = {}
 
     async def reload(self):
@@ -356,11 +362,11 @@ class OpsDroid:
             parsers = self.modules.get("parsers", {})
             rasanlu = get_parser_config("rasanlu", parsers)
             if rasanlu and rasanlu["enabled"]:
-                rasa_version_is_compatible = await has_compatible_version_rasanlu(
-                    rasanlu
-                )
-                if rasa_version_is_compatible is False:
-                    self.critical("Rasa version is not compatible", 5)
+                if await rasa_usable(rasanlu) is False:
+                    self.critical(
+                        "Cannot connect to Rasa or the Rasa version is not compatible.",
+                        5,
+                    )
                 await train_rasanlu(rasanlu, skills)
 
     async def setup_connectors(self, connectors):

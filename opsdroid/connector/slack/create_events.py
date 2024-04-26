@@ -1,4 +1,5 @@
 """A helper module to create opsdroid events from Slack events."""
+
 import logging
 from collections import defaultdict
 
@@ -48,20 +49,26 @@ class SlackEventCreator(events.EventCreator):
 
     async def _get_user_name(self, event):
         try:
-            user_info = await self.connector.lookup_username(event["user"])
+            if "bot_id" in event:
+                bot_info = await self.connector.lookup_username(
+                    event["bot_id"], is_bot=True
+                )
+                return bot_info.get("id")
+            elif "user" in event:
+                user_info = await self.connector.lookup_username(event["user"])
+                return user_info.get("name")
         except (ValueError, KeyError) as error:
             _LOGGER.error(_("Username lookup failed for %s."), error)
 
             return
 
-        return user_info["name"]
-
     async def handle_bot_message(self, event, channel):
         """Check that a bot message is opsdroid if not create the message"""
+
         if event["bot_id"] != self.connector.bot_id:
             return await self.create_message(event, channel)
 
-    async def create_message(self, event, channel):
+    async def create_message(self, event, channel, isbot=False):
         """Send a Message event."""
 
         user_name = await self._get_user_name(event)
@@ -71,11 +78,10 @@ class SlackEventCreator(events.EventCreator):
 
         _LOGGER.debug("Replacing userids in message with usernames")
         text = await self.connector.replace_usernames(event["text"])
-
         return events.Message(
             text,
             user=user_name,
-            user_id=event["user"],
+            user_id=event.get("user", event.get("bot_id")),
             target=event["channel"],
             connector=self.connector,
             event_id=event["ts"],
@@ -95,7 +101,7 @@ class SlackEventCreator(events.EventCreator):
         return events.EditedMessage(
             text,
             user=user_name,
-            user_id=event["message"]["user"],
+            user_id=event["message"].get("user", event["message"]["username"]),
             target=event["channel"],
             connector=self.connector,
             event_id=event["ts"],
@@ -248,12 +254,17 @@ class SlackEventCreator(events.EventCreator):
     async def view_submission_triggered(self, event, channel):
         """Send a ViewSubmission event."""
 
-        return slack_events.ViewSubmission(
+        view_submission = slack_events.ViewSubmission(
             event,
             user=event["user"]["id"],
             target=event["user"]["id"],
             connector=self.connector,
         )
+
+        if callback_id := event.get("view", {}).get("callback_id"):
+            view_submission.update_entity("callback_id", callback_id)
+
+        return view_submission
 
     async def view_closed_triggered(self, event, channel):
         """Send a ViewClosed event."""

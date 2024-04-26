@@ -31,13 +31,11 @@ Rasa NLU is also trained via the [API](https://rasa.com/docs/rasa/pages/http-api
 
 > **Note** - Rasa version >= 2.x.x is supported.
 
-```eval_rst
-.. warning::
-   Rasa NLU requires 4GB of memory, 2GB for training models and 2GB for serving requests. If you do not provide enough it will hang and cause timeouts in opsdroid.
+```{warning}
+Rasa NLU requires 4GB of memory, 2GB for training models and 2GB for serving requests. If you do not provide enough it will hang and cause timeouts in opsdroid.
 ```
 
-```eval_rst
-.. autofunction:: opsdroid.matchers.match_rasanlu
+```{autofunction} opsdroid.matchers.match_rasanlu
 ```
 
 For developing or testing purposes you can run Rasa manually inside a container using:
@@ -45,13 +43,13 @@ For developing or testing purposes you can run Rasa manually inside a container 
 ```
 docker run \
     --rm -ti \
-    -p 5005:5005 \
+    -p 5000:5005 \
     --name rasa \
     rasa/rasa:2.6.2-full \
     run --enable-api --auth-token 85769fjoso084jd -vv
 ```
-
-## [Example 1](#example1)
+(rasanexample1)=
+## [Example 1]
 
 Skill file (`__init__.py`).
 ```python
@@ -168,6 +166,86 @@ The example skill will print the following .
   "entities": {
     "cuisine" : "Mexican",
     "location" : "center"
+  }
+}
+```
+
+### Using entities with [roles](https://learning.rasa.com/conversational-ai-with-rasa/entities/#roles-and-groups) (Rasa 3.X)
+
+```{warning}
+When using Rasa roles the entity name is used multiple times (for departure and for destination).
+To be able to provide it via `message.entities` Opsdroid rasanlu matcher will create a new name `city` with both roles `departure` and `destination` appended (with `_`).
+
+So the entities will be stored in `message.entities` with keys `city_departure` and `city_destination`.
+```
+
+Intents file (`intents.yml`).
+```YAML
+version: "3.1"
+
+intents:
+  - greetings
+  - bye
+  - travel
+
+entities:
+  - city:
+    roles:
+    - departure
+    - destination
+
+nlu:
+  - intent: greetings
+    examples: |
+      - Hey
+      - Hi
+      - hey there
+      - hello
+  - intent: bye
+    examples: |
+      - googbye
+      - bye
+      - ciao
+      - see you
+  - intent: travel
+    examples: |
+      - I want to fly from [Berlin]{"entity": "city","role":"departure"} to [San Francisco]{"entity": "city","role":"destination"}
+      - I want to go from [Berlin]{"entity": "city","role":"departure"} to [San Francisco]{"entity": "city","role":"destination"}
+      - I want to travel from [Berlin]{"entity": "city","role":"departure"} to [San Francisco]{"entity": "city","role":"destination"}
+```
+
+Skill file (`__init__.py`).
+```python
+from opsdroid.skill import Skill
+from opsdroid.matchers import match_rasanlu
+
+class MySkill(Skill):
+    @match_rasanlu('travel')
+    async def hello(self, message):
+        if "city_departure" in message.entities and "city_destination" in message.entities:
+            source = message.entities['city_departure']['value']
+            destination = message.entities['city_destination']['value']
+            await message.respond("👌 Searching for routes from {} to {}".format(source, destination))
+        else:
+            await message.respond("😕 I couldn't understand you. Maybe try to rephrase your query.")
+```
+
+This skill will result the following structure in `message.entities`:
+
+* Input: `I want to travel from Berlin to San Francisco`
+* `message.entities`:
+
+```JSON
+{
+  "city_departure":
+  {
+    "value": "Berlin",
+    "confidence": 0.9992508292198181
+  },
+  "city_destination":
+  {
+    "value": "San Francisco",
+    "confidence": 0.9521082639694214
   }
 }
 ```

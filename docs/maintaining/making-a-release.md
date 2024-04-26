@@ -28,7 +28,7 @@ Before creating the release do some final local testing:
 
 As opsdroid follows [SemVer 2.0](http://semver.org/) (`major.minor.patch`) the version number increase will depend on what has changed since the previous release.
 
-- If the release includes only bug fixes then only the `patch` will be incremented. (See [Backports](#Backports) section for making patches)
+- If the release includes only bug fixes then only the `patch` will be incremented.
 - If the release includes new features then the `minor` will be incremented and the `patch` will be reverted to `0`.
 - If the release includes changes which break backward compatibility then the `major` will be incremented with the `minor` and `patch` being reverted to `0`. However this only applies once opsdroid is above `v1.0.0`.
 
@@ -51,7 +51,7 @@ Once you are happy with the release notes click "Publish release" on the draft.
 This will result in a number of automated actions:
 
 - The new [release tag](https://github.com/opsdroid/opsdroid/tags) will be created on GitHub.
-- [Travis CI](https://travis-ci.org/opsdroid/opsdroid) will build the [pypi distribution](https://pypi.python.org/pypi/opsdroid) and upload it.
+- [Github CI](https://github.com/opsdroid/opsdroid/actions/) will build the [pypi distribution](https://pypi.python.org/pypi/opsdroid) and upload it.
 - [Docker Hub](https://hub.docker.com/r/opsdroid/opsdroid/) and [Github container registry](https://github.com/opsdroid/opsdroid/pkgs/container/opsdroid) will build a new container image, create the [new release tag](https://hub.docker.com/r/opsdroid/opsdroid/tags/) and also update `latest` to point to this release.
 - The @opsdroid [twitter account](https://twitter.com/opsdroid) will tweet that the release has been generated (via [IFTTT](https://ifttt.com)).
 

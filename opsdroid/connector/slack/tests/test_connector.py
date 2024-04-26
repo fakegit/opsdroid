@@ -1,13 +1,21 @@
 """Tests for the ConnectorSlack class."""
+
 import logging
 
 import asynctest.mock as amock
 import pytest
-from slack_sdk.socket_mode.request import SocketModeRequest
-
 from opsdroid import events
-from opsdroid.connector.slack.connector import SlackApiError
-from opsdroid.connector.slack.events import Blocks, EditedBlocks
+
+from slack_sdk.web.slack_response import SlackResponse
+from slack_sdk.errors import SlackApiError
+from opsdroid.connector.slack.events import (
+    Blocks,
+    EditedBlocks,
+    ModalOpen,
+    ModalPush,
+    ModalUpdate,
+)
+from slack_sdk.socket_mode.request import SocketModeRequest
 
 from .conftest import get_path
 
@@ -15,11 +23,20 @@ USERS_INFO = ("/users.info", "GET", get_path("method_users.info.json"), 200)
 AUTH_TEST = ("/auth.test", "POST", get_path("method_auth.test.json"), 200)
 CHAT_POST_MESSAGE = ("/chat.postMessage", "POST", {"ok": True}, 200)
 CHAT_UPDATE_MESSAGE = ("/chat.update", "POST", {"ok": True}, 200)
+VIEWS_OPEN = ("/views.open", "POST", {"ok": True}, 200)
+VIEWS_UPDATE = ("/views.update", "POST", {"ok": True}, 200)
+VIEWS_PUSH = ("/views.push", "POST", {"ok": True}, 200)
 REACTIONS_ADD = ("/reactions.add", "POST", {"ok": True}, 200)
 CONVERSATIONS_HISTORY = (
     "/conversations.history",
     "GET",
     get_path("method_conversations.history.json"),
+    200,
+)
+CONVERSATIONS_LIST_LAST_PAGE = (
+    "/conversations.list",
+    "GET",
+    get_path("method_conversations.list_last_page.json"),
     200,
 )
 CONVERSATIONS_CREATE = ("/conversations.create", "POST", {"ok": True}, 200)
@@ -29,6 +46,7 @@ CONVERSATIONS_INVITE = ("/conversations.invite", "POST", {"ok": True}, 200)
 CONVERSATIONS_SET_TOPIC = ("/conversations.setTopic", "POST", {"ok": True}, 200)
 PINS_ADD = ("/pins.add", "POST", {"ok": True}, 200)
 PINS_REMOVE = ("/pins.remove", "POST", {"ok": True}, 200)
+FILES_UPLOAD = ("/files.upload", "POST", {"ok": True}, 200)
 
 
 @pytest.fixture
@@ -45,7 +63,7 @@ async def send_event(connector, mock_api):
     return _send_event
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*USERS_INFO)
 @pytest.mark.add_response(*AUTH_TEST)
 async def test_connect_events_api(connector, mock_api):
@@ -57,7 +75,7 @@ async def test_connect_events_api(connector, mock_api):
     assert connector.bot_id == "B061F7JD2"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*USERS_INFO)
 @pytest.mark.add_response(*AUTH_TEST)
 async def test_connect_socket_mode(opsdroid, mock_api_obj, mock_api):
@@ -70,9 +88,10 @@ async def test_connect_socket_mode(opsdroid, mock_api_obj, mock_api):
     connector.socket_mode_client.connect = amock.CoroutineMock()
     await connector.connect()
     assert connector.socket_mode_client.connect.called
+    await connector.disconnect()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*USERS_INFO)
 @pytest.mark.add_response(*AUTH_TEST)
 async def test_connect_no_socket_mode_client(opsdroid, mock_api_obj, mock_api, caplog):
@@ -84,21 +103,24 @@ async def test_connect_no_socket_mode_client(opsdroid, mock_api_obj, mock_api, c
     connector.slack_web_client.base_url = mock_api_obj.base_url
     await connector.connect()
     assert "RTM support has been dropped" in caplog.text
+    await connector.disconnect()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_connect_failure(connector, mock_api, caplog):
     await connector.connect()
     assert "The Slack Connector will not be available" in caplog.text
+    await connector.disconnect()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_disconnect(opsdroid, mock_api_obj, mock_api):
     opsdroid.config["connectors"] = {
         "slack": {"bot-token": "abc123", "socket-mode": True, "app-token": "bcd456"}
     }
     await opsdroid.load()
     connector = opsdroid.get_connector("slack")
+    await connector.disconnect()
     connector.socket_mode_client.disconnect = amock.CoroutineMock()
     connector.socket_mode_client.close = amock.CoroutineMock()
     await connector.disconnect()
@@ -106,7 +128,7 @@ async def test_disconnect(opsdroid, mock_api_obj, mock_api):
     assert connector.socket_mode_client.close.called
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_socket_event_handler(opsdroid, mock_api_obj, mock_api):
     opsdroid.config["connectors"] = {
         "slack": {"bot-token": "abc123", "socket-mode": True, "app-token": "bcd456"}
@@ -119,9 +141,10 @@ async def test_socket_event_handler(opsdroid, mock_api_obj, mock_api):
     connector.socket_mode_client.send_socket_mode_response = amock.CoroutineMock()
     await connector.socket_event_handler(connector.socket_mode_client, request)
     assert connector.socket_mode_client.send_socket_mode_response.called
+    await connector.disconnect()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(
     "/users.info",
     "GET",
@@ -134,7 +157,7 @@ async def test_lookup_username_user_not_present(connector, mock_api):
     assert user["id"] == "U01NK1K9L68"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CONVERSATIONS_HISTORY)
 async def test_search_history_messages(connector, mock_api):
     history = await connector.search_history_messages(
@@ -145,7 +168,22 @@ async def test_search_history_messages(connector, mock_api):
     assert isinstance(history, list)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
+@pytest.mark.add_response(
+    "/conversations.history", "GET", {"ok": True, "messages": []}, 200
+)
+async def test_search_history_messages_empty(connector, mock_api):
+    # This test is mostly to cover the `if no messages, break from loop logic`.
+    history = await connector.search_history_messages(
+        "C01N639ECTY", "1512085930.000000", "1512085980.000000"
+    )
+    assert mock_api.called("/conversations.history")
+
+    assert isinstance(history, list)
+    assert len(history) == 0
+
+
+@pytest.mark.anyio
 @pytest.mark.add_response(*CONVERSATIONS_HISTORY)
 async def test_search_history_messages_limit_more_than_1000(
     connector, mock_api, caplog
@@ -158,7 +196,59 @@ async def test_search_history_messages_limit_more_than_1000(
     assert "This might take some time" in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
+async def test__get_channels_rate_limit(
+    connector,
+    caplog,
+):
+    mocked_response = SlackResponse(
+        client=None,
+        http_verb="GET",
+        req_args={},
+        api_url="/conversations.history",
+        status_code=429,
+        headers={"Retry-After": 0.1},
+        data={"ok": False, "error": "ratelimited"},
+    )
+
+    mocked_conversations_list = amock.CoroutineMock()
+    mocked_conversations_list.side_effect = SlackApiError(
+        message="Rate limit threshold reached.",
+        response=mocked_response,
+    )
+
+    connector.slack_web_client.conversations_list = mocked_conversations_list
+    await connector._get_channels()
+
+    assert "Rate limit threshold reached." in caplog.text
+
+
+@pytest.mark.anyio
+async def test__get_channels_exception_raises(
+    connector,
+):
+    mocked_conversations_list = amock.CoroutineMock()
+    mocked_conversations_list.side_effect = SlackApiError(message="Error", response="?")
+    connector.slack_web_client.conversations_list = mocked_conversations_list
+
+    with pytest.raises(SlackApiError):
+        await connector._get_channels()
+
+
+@pytest.mark.anyio
+@pytest.mark.add_response(
+    "/conversations.history", "GET", {"ok": True, "messages": []}, 200
+)
+async def test__get_channels_no_channels(connector, mock_api, caplog):
+    caplog.set_level(logging.INFO)
+    await connector.search_history_messages(
+        "C01N639ECTY", "1512085930.000000", "1512085980.000000", 1001
+    )
+    assert mock_api.called("/conversations.history")
+    assert "This might take some time" in caplog.text
+
+
+@pytest.mark.anyio
 @pytest.mark.add_response(
     "/conversations.history",
     "GET",
@@ -180,15 +270,35 @@ async def test_search_history_messages_more_than_one_api_request(connector, mock
     assert isinstance(history, list)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
+@pytest.mark.add_response(*CONVERSATIONS_LIST_LAST_PAGE)
+async def test_find_channel(connector, mock_api):
+    connector.known_channels = {"general": {"name": "general", "id": "C012AB3CD"}}
+
+    channel = await connector.find_channel("general")
+    assert channel["id"] == "C012AB3CD"
+    assert channel["name"] == "general"
+
+
+@pytest.mark.anyio
+@pytest.mark.add_response(*CONVERSATIONS_LIST_LAST_PAGE)
+async def test_find_channel_not_found(connector, mock_api, caplog):
+    connector.known_channels = {"general": {"name": "general", "id": "C012AB3CD"}}
+
+    caplog.set_level(logging.INFO)
+    await connector.find_channel("another-channel")
+    assert "Channel with name another-channel not found" in caplog.text
+
+
+@pytest.mark.anyio
 async def test_replace_usernames(connector):
     connector.known_users = {"U01NK1K9L68": {"name": "Test User"}}
     message = "hello <@U01NK1K9L68>"
     replaced_message = await connector.replace_usernames(message)
-    assert replaced_message == "hello Test User"
+    assert replaced_message == "hello @Test User"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CHAT_POST_MESSAGE)
 async def test_send_message(send_event, connector):
     event = events.Message(text="test", user="user", target="room", connector=connector)
@@ -202,7 +312,7 @@ async def test_send_message(send_event, connector):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CHAT_POST_MESSAGE)
 async def test_send_message_inside_thread(send_event, connector):
     linked_event = events.Message(
@@ -227,7 +337,7 @@ async def test_send_message_inside_thread(send_event, connector):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CHAT_POST_MESSAGE)
 async def test_send_message_inside_thread_is_true(connector, send_event):
     connector.start_thread = True
@@ -252,7 +362,7 @@ async def test_send_message_inside_thread_is_true(connector, send_event):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CHAT_UPDATE_MESSAGE)
 async def test_edit_message(send_event, connector):
     linked_event = "1582838099.000600"
@@ -275,7 +385,7 @@ async def test_edit_message(send_event, connector):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CHAT_POST_MESSAGE)
 async def test_send_blocks(send_event, connector):
     event = Blocks(
@@ -293,7 +403,7 @@ async def test_send_blocks(send_event, connector):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CHAT_UPDATE_MESSAGE)
 async def test_edit_blocks(send_event, connector):
     event = EditedBlocks(
@@ -312,7 +422,48 @@ async def test_edit_blocks(send_event, connector):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
+@pytest.mark.add_response(*VIEWS_OPEN)
+async def test_open_modal(send_event, connector):
+    event = ModalOpen(trigger_id="123456", view={"key1": "value1", "key2": "value2"})
+    payload, response = await send_event(VIEWS_OPEN, event)
+    assert payload == {
+        "trigger_id": "123456",
+        "view": '{"key1": "value1", "key2": "value2"}',
+    }
+    assert response["ok"]
+
+
+@pytest.mark.anyio
+@pytest.mark.add_response(*VIEWS_UPDATE)
+async def test_update_modal(send_event, connector):
+    event = ModalUpdate(
+        external_id="123456",
+        view={"key1": "value1", "key2": "value2"},
+        hash_="12345678",
+    )
+    payload, response = await send_event(VIEWS_UPDATE, event)
+    assert payload == {
+        "external_id": "123456",
+        "view": '{"key1": "value1", "key2": "value2"}',
+        "hash": "12345678",
+    }
+    assert response["ok"]
+
+
+@pytest.mark.anyio
+@pytest.mark.add_response(*VIEWS_PUSH)
+async def test_push_modal(send_event, connector):
+    event = ModalPush(trigger_id="123456", view={"key1": "value1", "key2": "value2"})
+    payload, response = await send_event(VIEWS_PUSH, event)
+    assert payload == {
+        "trigger_id": "123456",
+        "view": '{"key1": "value1", "key2": "value2"}',
+    }
+    assert response["ok"]
+
+
+@pytest.mark.anyio
 @pytest.mark.add_response(*REACTIONS_ADD)
 async def test_send_reaction(send_event, connector):
     message = events.Message(
@@ -331,7 +482,7 @@ async def test_send_reaction(send_event, connector):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(
     "/reactions.add", "POST", {"ok": False, "error": "invalid_name"}, 200
 )
@@ -346,7 +497,7 @@ async def test_send_reaction_invalid_name(send_event):
     await send_event(("/reactions.add",), event)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response("/reactions.add", "POST", {"ok": False}, 200)
 async def test_send_reaction_unknown_error(send_event):
     message = events.Message(
@@ -361,7 +512,7 @@ async def test_send_reaction_unknown_error(send_event):
         assert not response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CONVERSATIONS_CREATE)
 async def test_send_room_creation(send_event):
     event = events.NewRoom(name="new_room")
@@ -370,7 +521,7 @@ async def test_send_room_creation(send_event):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CONVERSATIONS_RENAME)
 async def test_send_room_name_set(send_event):
     event = events.RoomName(name="new_name_room", target="room")
@@ -379,7 +530,7 @@ async def test_send_room_name_set(send_event):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CONVERSATIONS_JOIN)
 async def test_join_room(send_event):
     event = events.JoinRoom(target="room")
@@ -388,7 +539,7 @@ async def test_join_room(send_event):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CONVERSATIONS_INVITE)
 async def test_send_user_invitation(send_event):
     event = events.UserInvite(user_id="U2345678901", target="room")
@@ -397,7 +548,7 @@ async def test_send_user_invitation(send_event):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*CONVERSATIONS_SET_TOPIC)
 async def test_send_room_description(send_event):
     event = events.RoomDescription(description="Topic Update", target="room")
@@ -406,7 +557,7 @@ async def test_send_room_description(send_event):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*PINS_ADD)
 async def test_send_pin_added(send_event, connector):
     message = events.Message(
@@ -425,7 +576,7 @@ async def test_send_pin_added(send_event, connector):
     assert response["ok"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.add_response(*PINS_REMOVE)
 async def test_send_pin_removed(send_event, connector):
     message = events.Message(

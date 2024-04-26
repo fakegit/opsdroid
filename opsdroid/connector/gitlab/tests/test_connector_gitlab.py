@@ -1,22 +1,20 @@
-import logging
 import asyncio
+import logging
 from pathlib import Path
 
 import asynctest.mock as amock
-import pytest
-
 import opsdroid.connector.gitlab.events as gitlab_events
+import pytest
 from opsdroid.connector.gitlab import ConnectorGitlab
-from opsdroid.matchers import match_event
-from opsdroid.testing import call_endpoint, running_opsdroid
 from opsdroid.const import GITLAB_API_ENDPOINT
 from opsdroid.events import Message
+from opsdroid.matchers import match_event
+from opsdroid.testing import call_endpoint, running_opsdroid
 
 
 @pytest.fixture
 async def connector(opsdroid, mock_api_obj):
     opsdroid.config["connectors"] = {"gitlab": {"webhook-token": "secret-stuff!"}}
-    opsdroid.config["web"] = {"base-url": mock_api_obj.base_url}
 
     await opsdroid.load()
     return opsdroid.get_connector("gitlab")
@@ -66,7 +64,7 @@ def test_base_url(opsdroid):
     assert connector.base_url == "http://example.com"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_gitlab_webhook_handler_excepion(caplog):
     caplog.set_level(logging.DEBUG)
     connector = ConnectorGitlab({"name": "gitlab"})
@@ -79,7 +77,7 @@ async def test_gitlab_webhook_handler_excepion(caplog):
     assert "Unable to get JSON from request" in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_validate_request(opsdroid):
     config = {"webhook-token": "secret-stuff"}
     connector = ConnectorGitlab(config, opsdroid)
@@ -99,12 +97,12 @@ async def test_validate_request(opsdroid):
     assert not is_valid
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_listen(connector):
     assert await connector.listen() is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_issue_created(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -141,7 +139,7 @@ async def test_issue_created(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_issue_label_updated(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -176,7 +174,7 @@ async def test_issue_label_updated(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_issue_labeled(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -211,7 +209,7 @@ async def test_issue_labeled(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_issue_edited(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -246,7 +244,7 @@ async def test_issue_edited(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generic_issue(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -281,7 +279,7 @@ async def test_generic_issue(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_no_token_returns_401(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -315,7 +313,7 @@ async def test_no_token_returns_401(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_issue_closed(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -350,7 +348,7 @@ async def test_issue_closed(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generic_issue_event(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -385,7 +383,7 @@ async def test_generic_issue_event(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_bad_json_file(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.DEBUG)
 
@@ -421,7 +419,7 @@ async def test_bad_json_file(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mr_label_update_event(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -456,7 +454,7 @@ async def test_mr_label_update_event(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mr_opened_event(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -491,7 +489,7 @@ async def test_mr_opened_event(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mr_merged_event(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -526,7 +524,7 @@ async def test_mr_merged_event(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mr_approved_event(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -561,7 +559,7 @@ async def test_mr_approved_event(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mr_closed_event(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -596,7 +594,7 @@ async def test_mr_closed_event(opsdroid, connector, mock_api, caplog):
         assert "Exception when running skill" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mr_generic_event(opsdroid, connector, mock_api, caplog):
     caplog.set_level(logging.INFO)
 
@@ -634,7 +632,7 @@ async def test_mr_generic_event(opsdroid, connector, mock_api, caplog):
 ISSUE_TARGET = "FabioRosado/test-project/-/issues/1"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_send_message(opsdroid, caplog):
     caplog.set_level(logging.DEBUG)
 
@@ -672,7 +670,7 @@ async def test_send_message(opsdroid, caplog):
         assert result is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_send_message_bad_status(opsdroid, caplog):
     caplog.set_level(logging.DEBUG)
 
@@ -710,7 +708,7 @@ async def test_send_message_bad_status(opsdroid, caplog):
         assert result is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_send_message_no_token(opsdroid, caplog):
     caplog.set_level(logging.DEBUG)
 

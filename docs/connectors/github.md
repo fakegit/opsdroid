@@ -4,7 +4,7 @@ A connector for [opsdroid](https://github.com/opsdroid/opsdroid) to comment on i
 
 ## Requirements
 
-To use the GitHub connector you will need a user for the bot to use and generate a personal api token. It is recommended that you create a separate user from your own account for this. You also need to configure a webhook to send events to opsdroid, this will require you to [expose opsdroid to the internet](https://docs.opsdroid.dev/en/stable/exposing.html) via a tunnel.
+To use the GitHub connector you will need a user for the bot to use and generate a personal api token. It is recommended that you create a separate user from your own account for this. You also need to configure a webhook to send events to opsdroid, this will require you to [expose opsdroid to the internet](../exposing.md) via a tunnel.
 
 ### Creating your application
 
@@ -49,12 +49,12 @@ _*Note:* You should add a secure secret when setting up your webhook, this will 
   - "Pull request review"
   - "Pull request review comment"
   - "Push"
-  
+
 _*Note:* You should add a secure secret when setting up your webhook, this will allow opsdroid to confirm that the event received is authentic and came from GitHub._
 
 ## Configuration
 
-#### Github app
+### Github app
 
 ```yaml
 connectors:
@@ -65,7 +65,7 @@ connectors:
     secret: <webhook secret>
 ```
 
-#### Webhook method
+### Webhook method
 
 ```yaml
 connectors:
@@ -77,114 +77,91 @@ connectors:
 
 ## Reference
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.ConnectorGitHub
-  :members:
+```{autoclass} opsdroid.connector.github.ConnectorGitHub
+:members:
 ```
 
 ## Events Reference
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.IssueCreated
-  :members:
+```{autoclass} opsdroid.connector.github.events.IssueCreated
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.IssueClosed
-  :members:
+```{autoclass} opsdroid.connector.github.events.IssueClosed
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.IssueCommented
-  :members:
+```{autoclass} opsdroid.connector.github.events.IssueCommented
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.Push
-  :members:
+```{autoclass} opsdroid.connector.github.events.Push
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PROpened
-  :members:
+```{autoclass} opsdroid.connector.github.events.PROpened
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRReopened
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRReopened
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PREdited
-  :members:
+```{autoclass} opsdroid.connector.github.events.PREdited
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRMerged
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRMerged
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRClosed
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRClosed
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRReviewSubmitted
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRReviewSubmitted
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRReviewEdited
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRReviewEdited
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRReviewDismissed
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRReviewDismissed
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRReviewCommentCreated
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRReviewCommentCreated
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRReviewCommentEdited
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRReviewCommentEdited
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.PRReviewCommentDeleted
-  :members:
+```{autoclass} opsdroid.connector.github.events.PRReviewCommentDeleted
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.Labeled
-  :members:
+```{autoclass} opsdroid.connector.github.events.Labeled
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.Unlabeled
-  :members:
+```{autoclass} opsdroid.connector.github.events.Unlabeled
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.CheckStarted
-  :members:
+```{autoclass} opsdroid.connector.github.events.CheckStarted
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.CheckCompleted
-  :members:
+```{autoclass} opsdroid.connector.github.events.CheckCompleted
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.CheckPassed
-  :members:
+```{autoclass} opsdroid.connector.github.events.CheckPassed
+:members:
 ```
 
-```eval_rst
-.. autoclass:: opsdroid.connector.github.events.CheckFailed
-  :members:
+```{autoclass} opsdroid.connector.github.events.CheckFailed
+:members:
 ```
